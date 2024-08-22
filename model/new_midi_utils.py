@@ -67,14 +67,10 @@ def midi_to_tensor(midi_path: str, max_samples: int, sr: int) -> torch.Tensor:
     
     Returns
     -------
-    - midi_tensor | torch.Tensor [shape=(11, # of ticks, 2)]
+    - midi_tensor | torch.Tensor [shape=(11, # of ticks)]
         - A tensor containing velocities for 10 different drums. 
           Each row corresponds to a drum and each column corresponds
-          to a starting tick (ticks are how time is measured in MIDI format). 
-          For the third dimension, the 0th index corresponds to velocities
-          and the 1st index corresponds to the ending tick for the corresponding starting
-          tick (in the second) dimension. This is included so that we can later reconstruct
-          a MIDI file from the tensor
+          to a starting tick (ticks are how time is measured in MIDI format) 
     """
     # Load in the MIDI file
     pm = pretty_midi.PrettyMIDI(midi_path)
@@ -90,30 +86,26 @@ def midi_to_tensor(midi_path: str, max_samples: int, sr: int) -> torch.Tensor:
     max_tick = pm.time_to_tick(max_samples / sr)
 
     for note in sorted_notes:
-        start_tick = pm.time_to_tick(note.start)
-        end_tick = min(pm.time_to_tick(note.end), max_tick) # Prevent the duration from exceeding max_tick length
+        tick = pm.time_to_tick(note.start)
 
         # Only parse MIDI information while
         # the tick is less than the max tick
-        if start_tick <= max_tick:
+        if tick <= max_tick:
             notes['drum'].append(note.pitch)
-            notes['start_tick'].append(start_tick)
-            notes['end_tick'].append(end_tick)
+            notes['tick'].append(tick)
             notes['velocity'].append(note.velocity)
         else:
             break
     
     # Create the MIDI tensor
-    midi_tensor = torch.zeros((len(DRUM_NOTES), max_tick + 1, 2))
+    midi_tensor = torch.zeros((len(DRUM_NOTES), max_tick + 1))
     for drum_index in DRUM_NOTES:
         for i in range(len(notes['drum'])):
             extracted_drum = notes['drum'][i]
-            start_tick = notes['start_tick'][i]
-            end_tick = notes['end_tick'][i]
-            if extracted_drum in DRUM_NOTES[drum_index] and start_tick <= max_tick:
+            tick = notes['tick'][i]
+            if extracted_drum in DRUM_NOTES[drum_index] and tick <= max_tick:
                 velocity = notes['velocity'][i]
-                midi_tensor[drum_index][start_tick][0] = velocity
-                midi_tensor[drum_index][start_tick][1] = end_tick
+                midi_tensor[drum_index][tick] = velocity
 
     return midi_tensor
 
@@ -130,11 +122,7 @@ def tensor_to_midi(
     - midi_tensor | torch.Tensor [shape=(11, # of ticks, 2)]:
         - A tensor containing velocities for 10 different drums. 
           Each row corresponds to a drum and each column corresponds
-          to a starting tick (ticks are how time is measured in MIDI format). 
-          For the third dimension, the 0th index corresponds to velocities
-          and the 1st index corresponds to the ending tick for the corresponding starting
-          tick (in the second) dimension. This is included so that we can later reconstruct
-          a MIDI file from the tensor
+          to a starting tick (ticks are how time is measured in MIDI format)
     - tempo | int:
         - Tempo in beats per minute (BPM)
     - out_file | Optional[str]:
@@ -149,13 +137,13 @@ def tensor_to_midi(
     # Iterate over every drum index and every tick and insert a MIDI note for
     # the corresponding drum at the appropriate tick
     for drum_index in range(midi_tensor.shape[0]):
-        for tick in tqdm(range(midi_tensor.shape[1]), desc="Ticks..."):
-            velocity = int(midi_tensor[drum_index][tick][0])
+        for tick in tqdm(range(midi_tensor.shape[1]), desc=f"Drum {drum_index}"):
+            velocity = int(midi_tensor[drum_index][tick])
             if velocity >= 0:
                 # Convert tick to time (pretty_midi works with time in seconds (float) rather than
                 # ticks)
                 start_time = pm.tick_to_time(tick)
-                end_time = pm.tick_to_time(int(midi_tensor[drum_index][tick][1]))
+                end_time = start_time + 0.1
 
                 note = pretty_midi.Note(
                     velocity=velocity,
@@ -170,8 +158,8 @@ def tensor_to_midi(
     pm.write(out_file)
     print("Successfully saved output as a midi file!")
 
-# midi_path = "../data/drummer1/session1/5_jazz-funk_116_beat_4-4.mid"
+midi_path = "../data/drummer1/session1/5_jazz-funk_116_beat_4-4.mid"
 
-# tempo = convert_bpm_to_microseconds(tempo=116)
-# all_velocities = midi_to_tensor(midi_path=midi_path, max_samples=1_000_000, sr=44_100)
-# tensor_to_midi(all_velocities, tempo=116)
+tempo = convert_bpm_to_microseconds(tempo=116)
+all_velocities = midi_to_tensor(midi_path=midi_path, max_samples=1_000_000, sr=44_100)
+tensor_to_midi(all_velocities, tempo=116)
