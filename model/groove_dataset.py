@@ -53,6 +53,9 @@ class GrooveDataset(Dataset):
             # Pad sample if necessary
             signal = self._pad(signal)
 
+            # Mix signal down to one channel
+            signal = self._mix_down(signal)
+
             # Truncate sample if necessary
             signal = self._truncate(signal)
 
@@ -93,6 +96,11 @@ class GrooveDataset(Dataset):
         if signal.shape[1] > self.max_samples:
             return signal[:self.max_samples]
         return signal
+    
+    def _mix_down(self, signal: torch.Tensor) -> torch.Tensor:
+        if signal.shape[0] > 1:
+            return torch.mean(input=signal, dim=0, keepdim=True)
+        return signal
         
 if __name__ == "__main__":
     # Constants
@@ -124,4 +132,4 @@ if __name__ == "__main__":
     audio_tensor, midi_tensor = groove_data[0]
     print(f"Audio tensor has shape {audio_tensor.shape}")
     print(f"Midi tensor has shape {midi_tensor.shape}")
-    tensor_to_midi(midi_tensor=midi_tensor, tempo=120)
+    # tensor_to_midi(midi_tensor=midi_tensor, tempo=120)
