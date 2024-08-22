@@ -14,6 +14,7 @@ class GrooveDataset(Dataset):
             split: str,
             sr: int,
             max_samples: int,
+            transform: torchaudio.transforms.Spectrogram,
             device: torch.DeviceObjType
             ) -> None:
         # Error handling for 
@@ -26,6 +27,7 @@ class GrooveDataset(Dataset):
         self.sr = sr
         self.max_samples = max_samples
         self.device = device
+        self.transform = transform.to(device)
 
     def __len__(self) -> None:
         return len(self.metadata)
@@ -44,17 +46,17 @@ class GrooveDataset(Dataset):
             # Load the sample onto the device to accelerate training
             signal = signal.to(self.device)
 
-            # print(f"Signal type before resampling: {type(signal)}")
-
             # Resample if necessary
             signal = self._resample(signal, signal_sr)
-            # print(f"Signal type after resampling: {type(signal)}")
 
             # Pad sample if necessary
             signal = self._pad(signal)
 
             # Truncate sample if necessary
             signal = self._truncate(signal)
+
+            # Apply transform
+            signal = self.transform(signal)
 
             return signal, velocities
         except IndexError:
@@ -100,6 +102,8 @@ if __name__ == "__main__":
     DATA_PATH = "../data"
     STANDARD_SR = 44_100
     MAX_SAMPLES = STANDARD_SR * 60 # Max sequence length will be 1 minute worth of samples
+    FRAME_SIZE = 1_024
+    HOP_SIZE = 512
     
     device = 'cpu'
 
@@ -108,12 +112,15 @@ if __name__ == "__main__":
 
     print(f"{device} selected\nFetching data...")
 
+    transform = torchaudio.transforms.Spectrogram(n_fft=FRAME_SIZE, hop_length=HOP_SIZE)
+
     # Create GrooveDataset object
     groove_data = GrooveDataset(
         metadata_path=METADATA_PATH,
         data_path=DATA_PATH,
         split='test',
         sr=STANDARD_SR,
+        transform=transform,
         max_samples=MAX_SAMPLES,
         device=device
     )

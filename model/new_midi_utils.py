@@ -149,7 +149,7 @@ def tensor_to_midi(
     # Iterate over every drum index and every tick and insert a MIDI note for
     # the corresponding drum at the appropriate tick
     for drum_index in range(midi_tensor.shape[0]):
-        for tick in tqdm(range(midi_tensor.shape[1]), desc="Ticks..."):
+        for tick in range(midi_tensor.shape[1]):
             velocity = int(midi_tensor[drum_index][tick][0])
             if velocity >= 0:
                 # Convert tick to time (pretty_midi works with time in seconds (float) rather than
