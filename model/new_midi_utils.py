@@ -1,3 +1,4 @@
+from typing import Optional
 from tqdm import tqdm
 import pretty_midi
 import collections
@@ -66,10 +67,14 @@ def midi_to_tensor(midi_path: str, max_samples: int, sr: int) -> torch.Tensor:
     
     Returns
     -------
-    - midi_tensor | torch.Tensor [shape=(10, # of ticks)]
+    - midi_tensor | torch.Tensor [shape=(11, # of ticks, 2)]
         - A tensor containing velocities for 10 different drums. 
           Each row corresponds to a drum and each column corresponds
-          to a tick, which is how time is measured in MIDI format
+          to a starting tick (ticks are how time is measured in MIDI format). 
+          For the third dimension, the 0th index corresponds to velocities
+          and the 1st index corresponds to the ending tick for the corresponding starting
+          tick (in the second) dimension. This is included so that we can later reconstruct
+          a MIDI file from the tensor
     """
     # Load in the MIDI file
     pm = pretty_midi.PrettyMIDI(midi_path)
@@ -115,33 +120,55 @@ def midi_to_tensor(midi_path: str, max_samples: int, sr: int) -> torch.Tensor:
 def tensor_to_midi(
     midi_tensor: torch.Tensor,
     tempo: int,
-    out_file: str = "output.mid",
-) -> pretty_midi.PrettyMIDI:
-    # 
+    out_file: Optional[str] = "transcription.mid",
+) -> None:
+    """
+    Convert a tensor to a MIDI file
+
+    Arguments
+    ---------
+    - midi_tensor | torch.Tensor [shape=(11, # of ticks, 2)]:
+        - A tensor containing velocities for 10 different drums. 
+          Each row corresponds to a drum and each column corresponds
+          to a starting tick (ticks are how time is measured in MIDI format). 
+          For the third dimension, the 0th index corresponds to velocities
+          and the 1st index corresponds to the ending tick for the corresponding starting
+          tick (in the second) dimension. This is included so that we can later reconstruct
+          a MIDI file from the tensor
+    - tempo | int:
+        - Tempo in beats per minute (BPM)
+    - out_file | Optional[str]:
+        - Name for output file ("transcription.mid" by default)
+    """
+    # Create a base PrettyMIDI object
     pm = pretty_midi.PrettyMIDI(initial_tempo=tempo, resolution=480)
     instrument = pretty_midi.Instrument(
         program=0, is_drum=True
     )
 
+    # Iterate over every drum index and every tick and insert a MIDI note for
+    # the corresponding drum at the appropriate tick
     for drum_index in range(midi_tensor.shape[0]):
         for tick in tqdm(range(midi_tensor.shape[1]), desc="Ticks..."):
             velocity = int(midi_tensor[drum_index][tick][0])
             if velocity >= 0:
+                # Convert tick to time (pretty_midi works with time in seconds (float) rather than
+                # ticks)
                 start_time = pm.tick_to_time(tick)
                 end_time = pm.tick_to_time(int(midi_tensor[drum_index][tick][1]))
 
                 note = pretty_midi.Note(
                     velocity=velocity,
-                    pitch=DRUM_NOTES[drum_index][0],  # Assuming first pitch in DRUM_NOTES
+                    pitch=DRUM_NOTES[drum_index][0],
                     start=start_time,
                     end=end_time
                 )
                 instrument.notes.append(note)
 
+    # Write to file
     pm.instruments.append(instrument)
     pm.write(out_file)
     print("Successfully saved output as a midi file!")
-    return pm
 
 # midi_path = "../data/drummer1/session1/5_jazz-funk_116_beat_4-4.mid"
 
