@@ -137,7 +137,7 @@ def tensor_to_midi(
     # Iterate over every drum index and every tick and insert a MIDI note for
     # the corresponding drum at the appropriate tick
     for drum_index in range(midi_tensor.shape[0]):
-        for tick in tqdm(range(midi_tensor.shape[1]), desc=f"Drum {drum_index}"):
+        for tick in range(midi_tensor.shape[1]):
             velocity = int(midi_tensor[drum_index][tick])
             if velocity >= 0:
                 # Convert tick to time (pretty_midi works with time in seconds (float) rather than
@@ -158,8 +158,8 @@ def tensor_to_midi(
     pm.write(out_file)
     print("Successfully saved output as a midi file!")
 
-midi_path = "../data/drummer1/session1/5_jazz-funk_116_beat_4-4.mid"
+# midi_path = "../data/drummer1/session1/5_jazz-funk_116_beat_4-4.mid"
 
-tempo = convert_bpm_to_microseconds(tempo=116)
-all_velocities = midi_to_tensor(midi_path=midi_path, max_samples=1_000_000, sr=44_100)
-tensor_to_midi(all_velocities, tempo=116)
+# tempo = convert_bpm_to_microseconds(tempo=116)
+# all_velocities = midi_to_tensor(midi_path=midi_path, max_samples=1_000_000, sr=44_100)
+# tensor_to_midi(all_velocities, tempo=116)
