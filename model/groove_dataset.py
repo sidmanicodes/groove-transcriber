@@ -4,7 +4,7 @@ import pandas as pd
 import torch
 import torchaudio
 from torch.utils.data import Dataset
-from new_midi_utils import midi_to_tensor, tensor_to_midi
+from new_midi_utils import midi_to_tensor, tensor_to_midi, convert_sec_to_tick
 
 class GrooveDataset(Dataset):
     def __init__(
@@ -15,14 +15,30 @@ class GrooveDataset(Dataset):
             sr: int,
             max_samples: int,
             transform: torchaudio.transforms.Spectrogram,
-            device: torch.DeviceObjType
+            device: torch.DeviceObjType,
+            data_amt: float = 1,
             ) -> None:
-        # Error handling for 
+        # Error handling
         if split not in ['train', 'validation', 'test']:
             raise ValueError(f"'{split}' is not a valid split; must be 'train', 'validation', or 'test'")
         
         self.metadata = pd.read_csv(metadata_path)
         self.metadata = self.metadata[self.metadata['split'] == split] # Filter by split
+        
+        # Drop any rows where there is no MIDI or .wav file
+        self.metadata.dropna(subset=['audio_filename', 'midi_filename'])
+        
+        # Filter out rows with empty strings
+        self.metadata = self.metadata[self.metadata['audio_filename'] != ''] 
+        self.metadata = self.metadata[self.metadata['midi_filename'] != ''] 
+
+        # Filter out rows with floats in audio_filename and midi_filename (edge case)
+        self.metadata = self.metadata[~self.metadata['audio_filename'].apply(lambda x: isinstance(x, float))] 
+        self.metadata = self.metadata[~self.metadata['midi_filename'].apply(lambda x: isinstance(x, float))] 
+
+        # Only get a certain percentage of the entire data set (mainly for testing purposes)
+        self.metadata = self.metadata[:int(len(self.metadata) * data_amt)]
+        
         self.data_path = data_path
         self.sr = sr
         self.max_samples = max_samples
@@ -52,11 +68,11 @@ class GrooveDataset(Dataset):
             # Pad sample if necessary
             signal = self._pad(signal)
 
-            # Mix signal down to one channel
-            signal = self._mix_down(signal)
-
             # Truncate sample if necessary
             signal = self._truncate(signal)
+
+            # Mix signal down to one channel
+            signal = self._mix_down(signal)
 
             # Apply transform
             signal = self.transform(signal)
@@ -68,6 +84,7 @@ class GrooveDataset(Dataset):
     def _get_signal_and_velocity_path(self, index: int) -> Tuple[str, str]:
         # Metadata file has path with a file separator "/" so we have to
         # split it apart and reconnect it for cross-os functionality
+        # print(f"File with id {self.metadata.iloc[index]['id']} is of type {type(self.metadata.iloc[index]['audio_filename'])}")
         signal_path = self.metadata.iloc[index]['audio_filename'].split(sep="/")
         midi_path = self.metadata.iloc[index]['midi_filename'].split(sep="/")
 
@@ -96,7 +113,7 @@ class GrooveDataset(Dataset):
         # If the signal has more samples than the max number of samples, truncate it
         # Otherwise, return the original signal
         if signal.shape[1] > self.max_samples:
-            return signal[:self.max_samples]
+            return signal[:, :self.max_samples]
         return signal
     
     def _mix_down(self, signal: torch.Tensor) -> torch.Tensor:
@@ -108,7 +125,7 @@ if __name__ == "__main__":
     # Constants
     METADATA_PATH = "../data/info.csv"
     DATA_PATH = "../data"
-    STANDARD_SR = 44_100
+    STANDARD_SR = 22_500
     MAX_SAMPLES = STANDARD_SR * 60 # Max sequence length will be 1 minute worth of samples
     FRAME_SIZE = 1_024
     HOP_SIZE = 512
@@ -120,23 +137,23 @@ if __name__ == "__main__":
 
     print(f"{device} selected\nFetching data...")
 
-    transform = torchaudio.transforms.Spectrogram(n_fft=FRAME_SIZE, hop_length=HOP_SIZE)
+    transform = torchaudio.transforms.MelSpectrogram(n_fft=FRAME_SIZE, hop_length=HOP_SIZE, n_mels=62)
 
     # Create GrooveDataset object
     groove_data = GrooveDataset(
         metadata_path=METADATA_PATH,
         data_path=DATA_PATH,
-        split='test',
+        split='train',
         sr=STANDARD_SR,
         transform=transform,
         max_samples=MAX_SAMPLES,
+        data_amt=0.01,
         device=device
     )
 
     # Inspect dataset length
     print(f"Dataset has {len(groove_data)} rows")
 
-    audio_tensor, midi_tensor = groove_data[0]
+    audio_tensor, midi_tensor = groove_data[6]
     print(f"Audio tensor has shape {audio_tensor.shape}")
     print(f"Midi tensor has shape {midi_tensor.shape}")
-    # tensor_to_midi(midi_tensor=midi_tensor, tempo=120)

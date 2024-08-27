@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Tuple
 from tqdm import tqdm
 import pretty_midi
 import collections
@@ -52,7 +52,13 @@ def convert_bpm_to_microseconds(tempo: int) -> int:
         return int(60_000_000 / tempo)
     return 0
 
-def midi_to_tensor(midi_path: str, max_samples: int, sr: int) -> torch.Tensor:
+def convert_sec_to_tick(sec: int) -> int:
+    generic_pm = pretty_midi.PrettyMIDI(resolution=480, initial_tempo=120)
+    ticks_per_sec = generic_pm.time_to_tick(1)
+    del generic_pm # We just needed this for conversion purposes, no point keeping it in memory
+    return sec * ticks_per_sec
+
+def midi_to_tensor(midi_path: str, max_samples: int, sr: int) -> Tuple[torch.Tensor, int]:
     """
     Convert a MIDI file to a tensor
 
@@ -83,7 +89,9 @@ def midi_to_tensor(midi_path: str, max_samples: int, sr: int) -> torch.Tensor:
     # Since we pad or truncate the actual audio samples in accordance to
     # a max_samples parameter, we need to ensure that the corresponding
     # MIDI tensor is padded / truncated in the same manner
-    max_tick = pm.time_to_tick(max_samples / sr)
+    generic_pm = pretty_midi.PrettyMIDI(resolution=480, initial_tempo=120)
+    max_tick = generic_pm.time_to_tick(max_samples / sr)
+    del generic_pm # We just needed this for conversion purposes, no point keeping it in memory
 
     for note in sorted_notes:
         tick = pm.time_to_tick(note.start)
@@ -111,7 +119,7 @@ def midi_to_tensor(midi_path: str, max_samples: int, sr: int) -> torch.Tensor:
 
 def tensor_to_midi(
     midi_tensor: torch.Tensor,
-    tempo: int,
+    tempo: int = 120,
     out_file: Optional[str] = "transcription.mid",
 ) -> None:
     """
@@ -158,8 +166,9 @@ def tensor_to_midi(
     pm.write(out_file)
     print("Successfully saved output as a midi file!")
 
-# midi_path = "../data/drummer1/session1/5_jazz-funk_116_beat_4-4.mid"
+# midi_path = "../data/drummer1/session1/143_funk-fast_125_fill_4-4.mid"
 
 # tempo = convert_bpm_to_microseconds(tempo=116)
-# all_velocities = midi_to_tensor(midi_path=midi_path, max_samples=1_000_000, sr=44_100)
+# all_velocities = midi_to_tensor(midi_path=midi_path, max_samples=44_100*60, sr=44_100)
+# print(all_velocities.shape)
 # tensor_to_midi(all_velocities, tempo=116)
