@@ -109,7 +109,10 @@ class JojoNet(nn.Module):
         )
 
         # Final convolution for output
-        self.final = nn.Conv2d(in_channels=64, out_channels=11, kernel_size=1)
+        self.final = nn.Sequential(
+            nn.Conv2d(in_channels=64, out_channels=11, kernel_size=1),
+            nn.Sigmoid()
+        )
 
     def forward(self, x: torch.Tensor, training: bool = True, desired_ticks: Optional[int] = None) -> torch.Tensor:
         # print(x.shape)
@@ -166,6 +169,7 @@ class JojoNet(nn.Module):
         dec1 = self.decoder1(torch.concat((dec1, attn1), dim=1))
 
         output = self.final(dec1)
+        
         batch_size, num_channels, height, width = output.shape
 
         # Flatten the output

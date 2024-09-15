@@ -14,14 +14,14 @@ import json
 # Constants
 METADATA_PATH = "../data/info.csv"
 DATA_PATH = "../data"
-STANDARD_SR = 15_000
-MAX_SAMPLES = STANDARD_SR * 60 # Max sequence length will be 1 minute worth of samples
+STANDARD_SR = 44_100
+MAX_SAMPLES = STANDARD_SR * 12 # Max sequence length will be 12 seconds
 FRAME_SIZE = 1_024
-HOP_SIZE = 512
-NUM_MEL_BANDS = 62
+HOP_SIZE = 441
+NUM_MEL_BANDS = 250
 BATCH_SIZE = 128
 LEARNING_RATE = 1e-3
-NUM_EPOCHS = 20
+NUM_EPOCHS = 10
 
 history = []
 
@@ -48,7 +48,7 @@ def train_one_epoch(
     # Set the model to train mode
     model.train()
 
-    for i, (signals, midi_tensors) in enumerate(data_loader):
+    for signals, midi_tensors in tqdm(data_loader, desc="Training..."):
         # Load signals and midi_tensors onto device
         signals: torch.Tensor =  signals.to(device)
         midi_tensors: torch.Tensor = midi_tensors.to(device)
@@ -131,7 +131,7 @@ if __name__ == "__main__":
     print("Created model")
 
     # Instantiate loss function and optimizer
-    mse_loss = nn.MSELoss()
+    bce_loss = nn.BCELoss()
     adam_optimizer = torch.optim.Adam(params=jojonet.parameters(), lr=LEARNING_RATE)
 
     print("Beginning training -- here we go!")
@@ -140,7 +140,7 @@ if __name__ == "__main__":
     train(
         model=jojonet, 
         data_loader=train_set, 
-        loss_fn=mse_loss, 
+        loss_fn=bce_loss, 
         optimizer=adam_optimizer, 
         device=device, 
         epochs=NUM_EPOCHS
